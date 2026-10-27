@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Usage: node src/compare.mjs <reference.svg|html> <candidate.html> [outDir] [--dpr=1] [--width=1280] [--height=832] [--correspond] [--text]
+// Usage: node src/compare.mjs <reference.svg|html> <candidate.html> [outDir] [--dpr=1] [--width=1280] [--height=832] [--correspond] [--features] [--text]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { launch, render, openPage, assertSameDimensions } from './render.mjs';
 import { proposeComponents, knockouts } from './components.mjs';
 import { matchComponents } from './match.mjs';
+import { compareFeatures } from './features.mjs';
 import { compareResiduals } from './residual.mjs';
 import { svgGlyphCandidates, clusterGlyphRuns, compareTextRegion } from './text.mjs';
 import { PNG } from 'pngjs';
@@ -35,6 +36,21 @@ try {
       await op.context.close();
     }
     report.correspondence = matchComponents(ko[0], ko[1], { dpr });
+    if ('features' in opt) {
+      // Stage 3 diagnostics need sample density: re-render both sides at 2x regardless of --dpr.
+      const hi = { width, height, dpr: 2 };
+      const a = PNG.sync.read((await render(browser, resolve(refFile), hi)).png), b = PNG.sync.read((await render(browser, resolve(candFile), hi)).png);
+      const margin = 16;
+      for (const m of report.correspondence.matches) {
+        if (m.relation !== '1:1') continue; // composite matches have no single shape to fit
+        const bx = m.referenceBoxCssPx;
+        if (bx.width * bx.height >= 0.8 * width * height) { m.features = { status: 'skipped', reason: 'page-scale background; no isolated silhouette' }; continue; }
+        const u = (p, q) => ({ x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x + p.width, q.x + q.width), y1: Math.max(p.y + p.height, q.y + q.height) });
+        const r = u(m.referenceBoxCssPx, m.candidateBoxCssPx);
+        const box = { x0: Math.max(0, Math.floor((r.x0 - margin) * 2)), y0: Math.max(0, Math.floor((r.y0 - margin) * 2)), x1: Math.min(a.width - 1, Math.ceil((r.x1 + margin) * 2)), y1: Math.min(a.height - 1, Math.ceil((r.y1 + margin) * 2)) };
+        m.features = compareFeatures(a, b, box, { dpr: 2 });
+      }
+    }
   }
   if ('text' in opt) {
     // Outlined text: cluster glyph-like shapes into runs, then compare each run as visual lines at 2x.
