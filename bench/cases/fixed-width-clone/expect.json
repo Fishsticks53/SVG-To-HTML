@@ -1,0 +1,4 @@
+{
+  "accepted": false,
+  "why": "Pixel-identical at 1280 but overflows at 1120: robustness gate must fail"
+}
