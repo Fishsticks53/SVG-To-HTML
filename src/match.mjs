@@ -26,6 +26,8 @@ function bboxDelta(refBox, candBox, dpr) {
   };
 }
 
+const boxCss = (fps, dpr) => { const b = unionBox(fps); return { x: b.x0 / dpr, y: b.y0 / dpr, width: (b.x1 - b.x0 + 1) / dpr, height: (b.y1 - b.y0 + 1) / dpr }; };
+
 const unionBox = (fps) => fps.reduce((b, f) => (!b ? { ...f.bbox } : {
   x0: Math.min(b.x0, f.bbox.x0), y0: Math.min(b.y0, f.bbox.y0), x1: Math.max(b.x1, f.bbox.x1), y1: Math.max(b.y1, f.bbox.y1),
 }), null);
@@ -116,6 +118,8 @@ export function matchComponents(ref, cand, { dpr = 1, minIoU = 0.5, groupCover =
       matchId: `m-${String(i + 1).padStart(3, '0')}`, ...m,
       reference: m.refIds.map((id) => ({ id, selector: rm.get(id).selector })),
       candidate: m.candIds.map((id) => ({ id, selector: cm.get(id).selector })),
+      referenceBoxCssPx: boxCss(m.refIds.map((id) => rm.get(id).footprint), dpr),
+      candidateBoxCssPx: boxCss(m.candIds.map((id) => cm.get(id).footprint), dpr),
       compositionSensitive: [...m.refIds.map((id) => rm.get(id)), ...m.candIds.map((id) => cm.get(id))].some((c) => c.compositionSensitive),
     })),
     missing, extra, noncontributing, subcomponents, unresolved,
