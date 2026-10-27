@@ -50,10 +50,10 @@ export async function launch() {
 }
 
 /**
- * Render one document under the lock. `file` is a local .svg/.html path.
+ * Open one document under the lock and leave the page open for further probing (knockouts, etc.).
  * Remote requests are blocked and reported; only file:/data:/blob: are allowed.
  */
-export async function render(browser, file, { width = 1280, height = 832, dpr = 1, geometry = false } = {}) {
+export async function openPage(browser, file, { width = 1280, height = 832, dpr = 1 } = {}) {
   const context = await browser.newContext({
     viewport: { width, height }, deviceScaleFactor: dpr, colorScheme: 'light',
     reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'UTC', javaScriptEnabled: true,
@@ -87,10 +87,17 @@ export async function render(browser, file, { width = 1280, height = 832, dpr = 
       scroll: { w: document.documentElement.scrollWidth, h: document.documentElement.scrollHeight },
     };
   });
-  const png = await page.screenshot({ type: 'png', animations: 'disabled', caret: 'hide', scale: 'device' });
-  const geom = geometry ? await page.evaluate(VISIBLE_GEOMETRY) : undefined;
+  const screenshot = () => page.screenshot({ type: 'png', animations: 'disabled', caret: 'hide', scale: 'device' });
+  return { page, context, screenshot, blocked, failed, errors, state, file, width, height, dpr };
+}
+
+export async function render(browser, file, { width = 1280, height = 832, dpr = 1, geometry = false } = {}) {
+  const op = await openPage(browser, file, { width, height, dpr });
+  const png = await op.screenshot();
+  const geom = geometry ? await op.page.evaluate(VISIBLE_GEOMETRY) : undefined;
   const version = browser.version();
-  await context.close();
+  await op.context.close();
+  const { state, blocked, failed, errors } = op;
 
   const size = pngSize(png);
   const expected = { width: Math.round(width * dpr), height: Math.round(height * dpr) };

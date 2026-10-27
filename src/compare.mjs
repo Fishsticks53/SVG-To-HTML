@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Usage: node src/compare.mjs <reference.svg|html> <candidate.html> [outDir] [--dpr=1] [--width=1280] [--height=832]
+// Usage: node src/compare.mjs <reference.svg|html> <candidate.html> [outDir] [--dpr=1] [--width=1280] [--height=832] [--correspond]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { launch, render, assertSameDimensions } from './render.mjs';
+import { launch, render, openPage, assertSameDimensions } from './render.mjs';
+import { proposeComponents, knockouts } from './components.mjs';
+import { matchComponents } from './match.mjs';
 import { compareResiduals } from './residual.mjs';
 
 const args = process.argv.slice(2);
@@ -23,6 +25,15 @@ try {
   writeFileSync(join(out, 'candidate.png'), cand.png);
   const residual = compareResiduals(ref.png, cand.png, { dpr, evidenceDir: join(out, 'crops') });
   const report = { manifests: { reference: ref.manifest, candidate: cand.manifest }, residual };
+  if ('correspond' in opt) {
+    const ko = [];
+    for (const [file, kind] of [[refFile, /\.svg$/i.test(refFile) ? 'svg' : 'html'], [candFile, 'html']]) {
+      const op = await openPage(browser, resolve(file), { width, height, dpr });
+      ko.push(await knockouts(op, await proposeComponents(op.page, kind)));
+      await op.context.close();
+    }
+    report.correspondence = matchComponents(ko[0], ko[1], { dpr });
+  }
   writeFileSync(join(out, 'cvc-report.json'), JSON.stringify(report, null, 2));
   console.log(`foreground disagreement ${(residual.foregroundDisagreementRatio * 100).toFixed(2)}%, ${residual.clusters.length} cluster(s) -> ${join(out, 'cvc-report.json')}`);
 } finally {
