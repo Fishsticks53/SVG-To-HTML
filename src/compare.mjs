@@ -34,6 +34,20 @@ try {
     }
     report.correspondence = matchComponents(ko[0], ko[1], { dpr });
   }
+  if ('text' in opt) {
+    // Outlined text: cluster glyph-like shapes into runs, then compare each run as visual lines at 2x.
+    const hi = { width, height, dpr: 2 };
+    const a = PNG.sync.read((await render(browser, resolve(refFile), hi)).png), b = PNG.sync.read((await render(browser, resolve(candFile), hi)).png);
+    const op = await openPage(browser, resolve(refFile), { width, height, dpr: 1 });
+    const { runs } = clusterGlyphRuns(await svgGlyphCandidates(op.page));
+    await op.context.close();
+    const pad = 6;
+    report.text = runs.filter((r) => r.kind === 'text-run').map((run) => {
+      const r = run.bboxCssPx;
+      const box = { x0: Math.max(0, Math.floor((r.x - pad) * 2)), y0: Math.max(0, Math.floor((r.y - pad) * 2)), x1: Math.min(a.width - 1, Math.ceil((r.x + r.width + pad) * 2)), y1: Math.min(a.height - 1, Math.ceil((r.y + r.height + pad) * 2)) };
+      return { run, comparison: compareTextRegion(a, b, box, { dpr: 2 }) };
+    });
+  }
   writeFileSync(join(out, 'cvc-report.json'), JSON.stringify(report, null, 2));
   console.log(`foreground disagreement ${(residual.foregroundDisagreementRatio * 100).toFixed(2)}%, ${residual.clusters.length} cluster(s) -> ${join(out, 'cvc-report.json')}`);
 } finally {
