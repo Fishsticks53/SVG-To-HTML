@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Usage: node src/compare.mjs <reference.svg|html> <candidate.html> [outDir] [--dpr=1] [--width=1280] [--height=832] [--correspond] [--features]
+// Usage: node src/compare.mjs <reference.svg|html> <candidate.html> [outDir] [--dpr=1] [--width=1280] [--height=832] [--correspond] [--features] [--text]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { launch, render, openPage, assertSameDimensions } from './render.mjs';
 import { proposeComponents, knockouts } from './components.mjs';
 import { matchComponents } from './match.mjs';
 import { compareFeatures } from './features.mjs';
-import { PNG } from 'pngjs';
 import { compareResiduals } from './residual.mjs';
+import { svgGlyphCandidates, clusterGlyphRuns, compareTextRegion } from './text.mjs';
+import { PNG } from 'pngjs';
 
 const args = process.argv.slice(2);
 const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => a.slice(2).split('=')));
@@ -50,6 +51,20 @@ try {
         m.features = compareFeatures(a, b, box, { dpr: 2 });
       }
     }
+  }
+  if ('text' in opt) {
+    // Outlined text: cluster glyph-like shapes into runs, then compare each run as visual lines at 2x.
+    const hi = { width, height, dpr: 2 };
+    const a = PNG.sync.read((await render(browser, resolve(refFile), hi)).png), b = PNG.sync.read((await render(browser, resolve(candFile), hi)).png);
+    const op = await openPage(browser, resolve(refFile), { width, height, dpr: 1 });
+    const { runs } = clusterGlyphRuns(await svgGlyphCandidates(op.page));
+    await op.context.close();
+    const pad = 6;
+    report.text = runs.filter((r) => r.kind === 'text-run').map((run) => {
+      const r = run.bboxCssPx;
+      const box = { x0: Math.max(0, Math.floor((r.x - pad) * 2)), y0: Math.max(0, Math.floor((r.y - pad) * 2)), x1: Math.min(a.width - 1, Math.ceil((r.x + r.width + pad) * 2)), y1: Math.min(a.height - 1, Math.ceil((r.y + r.height + pad) * 2)) };
+      return { run, comparison: compareTextRegion(a, b, box, { dpr: 2 }) };
+    });
   }
   writeFileSync(join(out, 'cvc-report.json'), JSON.stringify(report, null, 2));
   console.log(`foreground disagreement ${(residual.foregroundDisagreementRatio * 100).toFixed(2)}%, ${residual.clusters.length} cluster(s) -> ${join(out, 'cvc-report.json')}`);
