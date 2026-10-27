@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Usage: node src/compare.mjs <reference.svg|html> <candidate.html> [outDir] [--dpr=1] [--width=1280] [--height=832] [--correspond]
+// Usage: node src/compare.mjs <reference.svg|html> <candidate.html> [outDir] [--dpr=1] [--width=1280] [--height=832] [--correspond] [--text]
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { launch, render, openPage, assertSameDimensions } from './render.mjs';
 import { proposeComponents, knockouts } from './components.mjs';
 import { matchComponents } from './match.mjs';
 import { compareResiduals } from './residual.mjs';
+import { svgGlyphCandidates, clusterGlyphRuns, compareTextRegion } from './text.mjs';
+import { PNG } from 'pngjs';
 
 const args = process.argv.slice(2);
 const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => a.slice(2).split('=')));
