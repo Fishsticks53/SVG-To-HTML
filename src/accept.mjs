@@ -4,6 +4,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { analyze } from './pipeline.mjs';
+import { summarize } from './summary.mjs';
 
 const args = process.argv.slice(2);
 const opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => a.slice(2).split('=')));
@@ -14,6 +15,9 @@ const r = await analyze(refFile, candFile, { width: Number(opt.width ?? 1280), h
 const out = resolve(outArg ?? 'out');
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, 'cvc-acceptance.json'), JSON.stringify(r, null, 2));
+const summary = summarize(r, { refFile, candFile, width: Number(opt.width ?? 1280), height: Number(opt.height ?? 832) });
+writeFileSync(join(out, 'cvc-summary.json'), JSON.stringify(summary, null, 2));
 for (const g of r.acceptance.gates) console.log(`${g.status.padEnd(10)} ${g.name.padEnd(22)} ${g.detail}`);
-console.log(`verdict: ${r.acceptance.verdict}${r.acceptance.thresholdsCalibrated ? '' : ' (thresholds are uncalibrated defaults)'}  ${r.runtimeMs}ms -> ${join(out, 'cvc-acceptance.json')}`);
+for (const d of summary.defects.slice(0, 5)) console.log(`  #${d.rank} ${d.type}${d.selector ? ' ' + d.selector : d.candidate ? ' ' + d.candidate[0] : ''}`);
+console.log(`verdict: ${r.acceptance.verdict}${r.acceptance.thresholdsCalibrated ? '' : ' (thresholds are uncalibrated defaults)'}  ${r.runtimeMs}ms -> ${join(out, 'cvc-summary.json')}`);
 process.exit(r.acceptance.accepted ? 0 : 1);
